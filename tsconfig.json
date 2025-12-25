@@ -1,19 +1,16 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    // Language and Environment
     "target": "esnext",
-    "lib": ["esnext"],
+    "lib": [
+      "esnext"
+    ],
     "jsx": "react-native",
-    
-    // Modules
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    
-    // Type Checking
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -22,27 +19,19 @@
     "strictPropertyInitialization": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-    
-    // Additional Checks
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    
-    // Emit
     "skipLibCheck": true,
     "allowJs": true,
     "noEmit": true,
     "isolatedModules": true,
-    
-    // Interop Constraints
     "forceConsistentCasingInFileNames": true
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules"
