@@ -1,10 +1,19 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as MediaLibrary from 'expo-media-library';
 import { useTheme } from '../contexts/ThemeContext';
+import { LocalSong, AudioFolder } from '../types/music';
+import { FolderCard } from '../components/FolderCard';
+import { FolderSongsModal } from '../components/FolderSongsModal';
 
 export const LibraryScreen: React.FC = () => {
     const { theme, themeMode, toggleTheme } = useTheme();
+    const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+    const [audioFolders, setAudioFolders] = useState<AudioFolder[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [selectedFolder, setSelectedFolder] = useState<AudioFolder | null>(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
     const quickAccessItems = [
         { icon: 'heart', label: 'Liked Songs', count: 127, color: '#E63946' },
@@ -19,6 +28,93 @@ export const LibraryScreen: React.FC = () => {
         { name: 'Road Trip', songs: 58, color: '#F4A261' },
         { name: 'Study Focus', songs: 29, color: '#2A9D8F' },
     ];
+
+    useEffect(() => {
+        requestPermissionAndLoadSongs();
+    }, []);
+
+    const requestPermissionAndLoadSongs = async () => {
+        try {
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            setPermissionStatus(status);
+
+            if (status === 'granted') {
+                await loadLocalSongs();
+            }
+        } catch (error) {
+            console.error('Error requesting permission:', error);
+            Alert.alert('Error', 'Failed to request storage permission');
+        }
+    };
+
+    const loadLocalSongs = async () => {
+        try {
+            setLoading(true);
+            const media = await MediaLibrary.getAssetsAsync({
+                mediaType: 'audio',
+                first: 1000, // Load more songs to get all folders
+                sortBy: [[MediaLibrary.SortBy.creationTime, false]],
+            });
+
+            const songs: LocalSong[] = media.assets.map((asset) => ({
+                id: asset.id,
+                filename: asset.filename,
+                uri: asset.uri,
+                duration: asset.duration,
+                mediaType: asset.mediaType,
+                creationTime: asset.creationTime,
+            }));
+
+            // Group songs by folder
+            const folders = groupSongsByFolder(songs);
+            setAudioFolders(folders);
+        } catch (error) {
+            console.error('Error loading songs:', error);
+            Alert.alert('Error', 'Failed to load local songs');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const groupSongsByFolder = (songs: LocalSong[]): AudioFolder[] => {
+        const folderMap = new Map<string, LocalSong[]>();
+
+        songs.forEach((song) => {
+            // Extract folder path from URI
+            const folderPath = song.uri.substring(0, song.uri.lastIndexOf('/'));
+
+            if (!folderMap.has(folderPath)) {
+                folderMap.set(folderPath, []);
+            }
+            folderMap.get(folderPath)!.push(song);
+        });
+
+        // Convert map to array of AudioFolder objects
+        const folders: AudioFolder[] = Array.from(folderMap.entries()).map(([path, songs]) => {
+            // Extract folder name from path
+            const folderName = path.substring(path.lastIndexOf('/') + 1) || 'Root';
+
+            return {
+                path,
+                name: folderName,
+                songCount: songs.length,
+                songs: songs.sort((a, b) => a.filename.localeCompare(b.filename)),
+            };
+        });
+
+        // Sort folders by song count (descending)
+        return folders.sort((a, b) => b.songCount - a.songCount);
+    };
+
+    const handleFolderPress = (folder: AudioFolder) => {
+        setSelectedFolder(folder);
+        setModalVisible(true);
+    };
+
+    const handleCloseModal = () => {
+        setModalVisible(false);
+        setTimeout(() => setSelectedFolder(null), 300);
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -69,6 +165,81 @@ export const LibraryScreen: React.FC = () => {
                     </View>
                 </View>
 
+                {/* Device Music Section */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeader}>
+                        <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                            Device Music
+                        </Text>
+                        {permissionStatus === 'granted' && audioFolders.length > 0 && (
+                            <Text style={[styles.folderCount, { color: theme.colors.textSecondary }]}>
+                                {audioFolders.length} {audioFolders.length === 1 ? 'folder' : 'folders'}
+                            </Text>
+                        )}
+                    </View>
+
+                    {permissionStatus === 'undetermined' && (
+                        <View style={[styles.permissionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                            <Ionicons name="musical-notes" size={48} color={theme.colors.primary} />
+                            <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>
+                                Requesting Permission...
+                            </Text>
+                        </View>
+                    )}
+
+                    {permissionStatus === 'denied' && (
+                        <View style={[styles.permissionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                            <Ionicons name="lock-closed" size={48} color={theme.colors.error} />
+                            <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>
+                                Permission Denied
+                            </Text>
+                            <Text style={[styles.permissionDescription, { color: theme.colors.textSecondary }]}>
+                                Please enable storage permission in your device settings to access local music.
+                            </Text>
+                            <TouchableOpacity
+                                style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
+                                onPress={requestPermissionAndLoadSongs}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={styles.retryButtonText}>Retry</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {permissionStatus === 'granted' && loading && (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="large" color={theme.colors.primary} />
+                            <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+                                Loading your music...
+                            </Text>
+                        </View>
+                    )}
+
+                    {permissionStatus === 'granted' && !loading && audioFolders.length === 0 && (
+                        <View style={[styles.permissionCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                            <Ionicons name="musical-note-outline" size={48} color={theme.colors.textSecondary} />
+                            <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>
+                                No Music Found
+                            </Text>
+                            <Text style={[styles.permissionDescription, { color: theme.colors.textSecondary }]}>
+                                No audio files found on your device.
+                            </Text>
+                        </View>
+                    )}
+
+                    {permissionStatus === 'granted' && !loading && audioFolders.length > 0 && (
+                        <View>
+                            {audioFolders.map((folder) => (
+                                <FolderCard
+                                    key={folder.path}
+                                    folder={folder}
+                                    onPress={() => handleFolderPress(folder)}
+                                />
+                            ))}
+                        </View>
+                    )}
+                </View>
+
                 {/* Playlists */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
@@ -106,6 +277,13 @@ export const LibraryScreen: React.FC = () => {
 
                 <View style={styles.bottomSpacing} />
             </ScrollView>
+
+            {/* Folder Songs Modal */}
+            <FolderSongsModal
+                visible={modalVisible}
+                folder={selectedFolder}
+                onClose={handleCloseModal}
+            />
         </View>
     );
 };
@@ -181,9 +359,49 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: '700',
     },
+    folderCount: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
     seeAll: {
         fontSize: 14,
         fontWeight: '600',
+    },
+    permissionCard: {
+        padding: 32,
+        borderRadius: 16,
+        borderWidth: 1,
+        alignItems: 'center',
+    },
+    permissionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    permissionDescription: {
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 16,
+    },
+    retryButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 8,
+    },
+    retryButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    loadingContainer: {
+        padding: 32,
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 14,
     },
     playlistItem: {
         flexDirection: 'row',
