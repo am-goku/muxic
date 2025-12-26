@@ -14,4 +14,13 @@ export interface AudioFolder {
     songs: LocalSong[];
 }
 
+export interface StreamingTrack {
+    id: string;
+    title: string;
+    artist: string;
+    artwork: string;
+    duration: number;
+    streamUrl: string;
+}
+
 export type PermissionStatus = 'granted' | 'denied' | 'undetermined';

@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { StreamingTrack } from '../types/music';
 
 interface NowPlayingBarProps {
     onPress: () => void;
@@ -10,12 +11,43 @@ interface NowPlayingBarProps {
 
 export const NowPlayingBar: React.FC<NowPlayingBarProps> = ({ onPress }) => {
     const { theme } = useTheme();
-    const { currentSong, isPlaying, pauseSong, resumeSong, progress, duration } = usePlayer();
+    const { currentSong, isPlaying, isLoading, pauseSong, resumeSong, progress, duration } = usePlayer();
 
     if (!currentSong) return null;
 
-    const getSongTitle = (filename: string): string => {
-        return filename.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
+    const isStreamingTrack = (song: any): song is StreamingTrack => {
+        return 'streamUrl' in song;
+    };
+
+    const getSongTitle = (): string => {
+        if (isStreamingTrack(currentSong)) {
+            return currentSong.title;
+        }
+        return currentSong.filename.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
+    };
+
+    const getArtistName = (): string => {
+        if (isStreamingTrack(currentSong)) {
+            return currentSong.artist;
+        }
+        return 'Unknown Artist';
+    };
+
+    const getAlbumArtwork = () => {
+        if (isStreamingTrack(currentSong) && currentSong.artwork) {
+            return (
+                <Image
+                    source={{ uri: currentSong.artwork }}
+                    style={styles.artwork}
+                    resizeMode="cover"
+                />
+            );
+        }
+        return (
+            <View style={[styles.artwork, { backgroundColor: theme.colors.primary }]}>
+                <Ionicons name="musical-note" size={20} color="#FFFFFF" />
+            </View>
+        );
     };
 
     const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
@@ -39,31 +71,34 @@ export const NowPlayingBar: React.FC<NowPlayingBarProps> = ({ onPress }) => {
             {/* Content */}
             <View style={styles.content}>
                 {/* Album art */}
-                <View style={[styles.artwork, { backgroundColor: theme.colors.primary }]}>
-                    <Ionicons name="musical-note" size={20} color="#FFFFFF" />
-                </View>
+                {getAlbumArtwork()}
 
                 {/* Song info */}
                 <View style={styles.songInfo}>
                     <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>
-                        {getSongTitle(currentSong.filename)}
+                        {getSongTitle()}
                     </Text>
                     <Text style={[styles.artist, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                        Unknown Artist
+                        {isLoading ? 'Loading...' : getArtistName()}
                     </Text>
                 </View>
 
-                {/* Play/Pause button */}
+                {/* Play/Pause/Loading button */}
                 <TouchableOpacity
                     style={styles.playButton}
                     onPress={isPlaying ? pauseSong : resumeSong}
                     activeOpacity={0.7}
+                    disabled={isLoading}
                 >
-                    <Ionicons
-                        name={isPlaying ? 'pause' : 'play'}
-                        size={28}
-                        color={theme.colors.text}
-                    />
+                    {isLoading ? (
+                        <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : (
+                        <Ionicons
+                            name={isPlaying ? 'pause' : 'play'}
+                            size={28}
+                            color={theme.colors.text}
+                        />
+                    )}
                 </TouchableOpacity>
             </View>
         </TouchableOpacity>

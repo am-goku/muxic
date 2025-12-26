@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { PlayerProvider } from './src/contexts/PlayerContext';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -11,12 +12,41 @@ import { BottomNav } from './src/components/BottomNav';
 import { NowPlayingBar } from './src/components/NowPlayingBar';
 import { View, StyleSheet } from 'react-native';
 
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
+
 type TabType = 'home' | 'search' | 'library' | 'profile';
 
 function AppContent() {
   const { themeMode } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [playerVisible, setPlayerVisible] = useState(false);
+  const [appIsReady, setAppIsReady] = useState(false);
+
+  useEffect(() => {
+    async function prepare() {
+      try {
+        // Keep splash screen visible for at least 1 second
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setAppIsReady(true);
+      }
+    }
+
+    prepare();
+  }, []);
+
+  const onLayoutRootView = useCallback(async () => {
+    if (appIsReady) {
+      await SplashScreen.hideAsync();
+    }
+  }, [appIsReady]);
+
+  if (!appIsReady) {
+    return null;
+  }
 
   const renderScreen = () => {
     switch (activeTab) {
@@ -34,7 +64,7 @@ function AppContent() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onLayoutRootView}>
       {renderScreen()}
       <NowPlayingBar onPress={() => setPlayerVisible(true)} />
       <BottomNav activeTab={activeTab} onTabPress={setActiveTab} />

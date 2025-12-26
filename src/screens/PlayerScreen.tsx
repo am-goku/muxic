@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayer } from '../contexts/PlayerContext';
+import { StreamingTrack } from '../types/music';
 
 interface PlayerScreenProps {
     visible: boolean;
@@ -14,13 +15,44 @@ const { width } = Dimensions.get('window');
 
 export const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) => {
     const { theme } = useTheme();
-    const { currentSong, isPlaying, progress, duration, pauseSong, resumeSong, seekTo } = usePlayer();
+    const { currentSong, isPlaying, isLoading, progress, duration, pauseSong, resumeSong, seekTo } = usePlayer();
     const [isSeeking, setIsSeeking] = useState(false);
 
     if (!currentSong) return null;
 
-    const getSongTitle = (filename: string): string => {
-        return filename.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
+    const isStreamingTrack = (song: any): song is StreamingTrack => {
+        return 'streamUrl' in song;
+    };
+
+    const getSongTitle = (): string => {
+        if (isStreamingTrack(currentSong)) {
+            return currentSong.title;
+        }
+        return currentSong.filename.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
+    };
+
+    const getArtistName = (): string => {
+        if (isStreamingTrack(currentSong)) {
+            return currentSong.artist;
+        }
+        return 'Unknown Artist';
+    };
+
+    const getAlbumArtwork = () => {
+        if (isStreamingTrack(currentSong) && currentSong.artwork) {
+            return (
+                <Image
+                    source={{ uri: currentSong.artwork }}
+                    style={styles.artwork}
+                    resizeMode="cover"
+                />
+            );
+        }
+        return (
+            <View style={[styles.artwork, { backgroundColor: theme.colors.primary }]}>
+                <Ionicons name="musical-notes" size={120} color="rgba(255, 255, 255, 0.6)" />
+            </View>
+        );
     };
 
     const formatTime = (milliseconds: number): string => {
@@ -56,18 +88,21 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) 
 
                 {/* Album Artwork */}
                 <View style={styles.artworkContainer}>
-                    <View style={[styles.artwork, { backgroundColor: theme.colors.primary }]}>
-                        <Ionicons name="musical-notes" size={120} color="rgba(255, 255, 255, 0.6)" />
-                    </View>
+                    {getAlbumArtwork()}
+                    {isLoading && (
+                        <View style={styles.loadingOverlay}>
+                            <ActivityIndicator size="large" color={theme.colors.primary} />
+                        </View>
+                    )}
                 </View>
 
                 {/* Song Info */}
                 <View style={styles.songInfo}>
                     <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={2}>
-                        {getSongTitle(currentSong.filename)}
+                        {getSongTitle()}
                     </Text>
                     <Text style={[styles.artist, { color: theme.colors.textSecondary }]}>
-                        Unknown Artist
+                        {isLoading ? 'Loading...' : getArtistName()}
                     </Text>
                 </View>
 
@@ -76,13 +111,14 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) 
                     <Slider
                         style={styles.slider}
                         minimumValue={0}
-                        maximumValue={duration}
+                        maximumValue={duration || 1}
                         value={isSeeking ? undefined : progress}
                         onValueChange={() => setIsSeeking(true)}
                         onSlidingComplete={handleSeek}
                         minimumTrackTintColor={theme.colors.primary}
                         maximumTrackTintColor={theme.colors.border}
                         thumbTintColor={theme.colors.primary}
+                        disabled={isLoading}
                     />
                     <View style={styles.timeContainer}>
                         <Text style={[styles.time, { color: theme.colors.textSecondary }]}>
@@ -108,12 +144,17 @@ export const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) 
                         style={[styles.playButton, { backgroundColor: theme.colors.primary }]}
                         onPress={isPlaying ? pauseSong : resumeSong}
                         activeOpacity={0.8}
+                        disabled={isLoading}
                     >
-                        <Ionicons
-                            name={isPlaying ? 'pause' : 'play'}
-                            size={36}
-                            color="#FFFFFF"
-                        />
+                        {isLoading ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                            <Ionicons
+                                name={isPlaying ? 'pause' : 'play'}
+                                size={36}
+                                color="#FFFFFF"
+                            />
+                        )}
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.controlButton} activeOpacity={0.7}>
@@ -170,6 +211,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginTop: 40,
         marginBottom: 40,
+        position: 'relative',
     },
     artwork: {
         width: width - 80,
@@ -182,6 +224,17 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 16,
         elevation: 8,
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        borderRadius: 16,
     },
     songInfo: {
         paddingHorizontal: 32,
