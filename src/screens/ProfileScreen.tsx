@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 
-export const ProfileScreen: React.FC = () => {
+export const ProfileScreen = ({ navigation }: { navigation?: any }) => {
     const { theme, themeMode, toggleTheme } = useTheme();
 
     const stats = [
@@ -24,6 +24,7 @@ export const ProfileScreen: React.FC = () => {
         {
             title: 'Playback',
             items: [
+                { icon: 'settings-outline', label: 'Streaming Settings', action: 'streaming-settings' },
                 { icon: 'volume-high-outline', label: 'Audio Quality', action: 'audio-quality' },
                 { icon: 'shuffle-outline', label: 'Crossfade', action: 'crossfade' },
                 { icon: 'download-outline', label: 'Downloads', action: 'downloads' },
@@ -103,7 +104,15 @@ export const ProfileScreen: React.FC = () => {
                                         itemIndex < section.items.length - 1 && styles.settingsItemBorder,
                                         itemIndex < section.items.length - 1 && { borderBottomColor: theme.colors.border },
                                     ]}
-                                    onPress={item.isTheme ? toggleTheme : () => console.log(item.action)}
+                                    onPress={() => {
+                                        if (item.isTheme) {
+                                            toggleTheme();
+                                        } else if (item.action === 'streaming-settings' && navigation) {
+                                            navigation.navigate('Settings');
+                                        } else {
+                                            console.log(item.action);
+                                        }
+                                    }}
                                     activeOpacity={0.7}
                                 >
                                     <Ionicons name={item.icon as any} size={22} color={theme.colors.text} />

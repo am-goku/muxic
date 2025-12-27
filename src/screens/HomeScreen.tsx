@@ -1,16 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, ActivityIndicator, Image, Animated } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
-import { usePlayer } from '../contexts/PlayerContext';
+
 import { SectionHeader } from '../components/SectionHeader';
 import { StreamingTrackCard } from '../components/StreamingTrackCard';
 import { StreamingTrack } from '../types/music';
 import { audiusAPI, AudiusTrack } from '../services/audiusApi';
 
-export const HomeScreen: React.FC = () => {
+export const HomeScreen = ({ navigation }: { navigation?: any }) => {
     const { theme, themeMode, toggleTheme } = useTheme();
-    const { playSong, pauseSong, resumeSong, currentSong, isPlaying } = usePlayer();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [topTracks, setTopTracks] = useState<StreamingTrack[]>([]);
@@ -92,104 +91,6 @@ export const HomeScreen: React.FC = () => {
         return 'Good evening';
     };
 
-    const renderStreamingTrackCard = (track: StreamingTrack) => {
-        const [imageLoaded, setImageLoaded] = React.useState(false);
-        const [imageError, setImageError] = React.useState(false);
-        const scaleAnim = React.useRef(new Animated.Value(1)).current;
-
-        const isCurrent = currentSong?.id === track.id;
-        const isCurrentPlaying = isCurrent && isPlaying;
-
-        React.useEffect(() => {
-            if (isCurrentPlaying) {
-                // Pulse animation when playing
-                Animated.loop(
-                    Animated.sequence([
-                        Animated.timing(scaleAnim, {
-                            toValue: 1.1,
-                            duration: 800,
-                            useNativeDriver: true,
-                        }),
-                        Animated.timing(scaleAnim, {
-                            toValue: 1,
-                            duration: 800,
-                            useNativeDriver: true,
-                        }),
-                    ])
-                ).start();
-            } else {
-                scaleAnim.setValue(1);
-            }
-        }, [isCurrentPlaying]);
-
-        const handleCardPress = () => {
-            if (isCurrent) {
-                if (isPlaying) {
-                    pauseSong();
-                } else {
-                    resumeSong();
-                }
-            } else {
-                playSong(track);
-            }
-        };
-
-        return (
-            <TouchableOpacity
-                style={[styles.songCard, { backgroundColor: theme.colors.surface }]}
-                onPress={handleCardPress}
-                activeOpacity={0.8}
-            >
-                <View style={styles.artworkContainer}>
-                    {track.artwork && !imageError ? (
-                        <>
-                            {!imageLoaded && (
-                                <View style={[styles.artwork, styles.placeholderArtwork, { backgroundColor: theme.colors.primary }]}>
-                                    <Ionicons name="musical-note" size={32} color="#FFFFFF" />
-                                </View>
-                            )}
-                            <Image
-                                source={{ uri: track.artwork }}
-                                style={[styles.artwork, !imageLoaded && styles.hiddenImage]}
-                                resizeMode="cover"
-                                onLoad={() => setImageLoaded(true)}
-                                onError={() => setImageError(true)}
-                            />
-                        </>
-                    ) : (
-                        <View style={[styles.artwork, { backgroundColor: theme.colors.primary }]}>
-                            <Ionicons name="musical-note" size={32} color="#FFFFFF" />
-                        </View>
-                    )}
-
-                    {/* Play/Pause Overlay */}
-                    {isCurrent && (
-                        <Animated.View
-                            style={[
-                                styles.playOverlay,
-                                { transform: [{ scale: scaleAnim }] }
-                            ]}
-                        >
-                            <View style={[styles.playButton, { backgroundColor: theme.colors.primary }]}>
-                                <Ionicons
-                                    name={isCurrentPlaying ? 'pause' : 'play'}
-                                    size={24}
-                                    color="#FFFFFF"
-                                />
-                            </View>
-                        </Animated.View>
-                    )}
-                </View>
-                <Text style={[styles.songTitle, { color: isCurrent ? theme.colors.primary : theme.colors.text }]} numberOfLines={2}>
-                    {track.title}
-                </Text>
-                <Text style={[styles.songArtist, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                    {track.artist}
-                </Text>
-            </TouchableOpacity>
-        );
-    };
-
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <ScrollView
@@ -259,7 +160,11 @@ export const HomeScreen: React.FC = () => {
                                 <SectionHeader
                                     title="Trending Now"
                                     icon="trending-up"
-                                    onSeeAll={() => console.log('See all trending')}
+                                    onSeeAll={() => navigation?.navigate('SeeAll', {
+                                        title: 'Trending Now',
+                                        tracks: trendingTracks,
+                                        icon: 'trending-up'
+                                    })}
                                 />
                                 <FlatList
                                     data={trendingTracks}
@@ -278,7 +183,11 @@ export const HomeScreen: React.FC = () => {
                                 <SectionHeader
                                     title="Top Electronic"
                                     icon="musical-notes"
-                                    onSeeAll={() => console.log('See all electronic')}
+                                    onSeeAll={() => navigation?.navigate('SeeAll', {
+                                        title: 'Top Electronic',
+                                        tracks: topTracks,
+                                        icon: 'musical-notes'
+                                    })}
                                 />
                                 <FlatList
                                     data={topTracks}

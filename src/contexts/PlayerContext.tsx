@@ -1,6 +1,8 @@
 import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { useAudioPlayer } from 'expo-audio';
 import { PlayableTrack, StreamingTrack } from '../types/music';
+import { useSettings } from './SettingsContext';
+import { cacheManager } from '../utils/cacheManager';
 
 interface PlayerContextType {
     currentSong: PlayableTrack | null;
@@ -31,8 +33,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [currentIndex, setCurrentIndex] = useState(-1);
 
     const player = useAudioPlayer();
+    const { streamingMode } = useSettings();
     const loadingRef = useRef(false);
     const loadRequestIdRef = useRef(0);
+    const preloadingRef = useRef(false);
 
     // Update progress while playing and detect song end
     useEffect(() => {
@@ -108,12 +112,45 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             setProgress(0);
             setDuration(0);
 
-            const uri = getSongUri(song);
+            const sourceUri = getSongUri(song);
+            let playUri = sourceUri;
 
-            // Load and play new song
-            await player.replace({
-                uri,
-            });
+            // Handle download mode
+            if (streamingMode === 'download') {
+                try {
+                    // Check cache first
+                    const cachedUri = await cacheManager.getSong(song.id);
+
+                    if (cachedUri) {
+                        console.log('Playing from cache:', cachedUri);
+                        playUri = cachedUri;
+                    } else {
+                        console.log('Downloading song:', song.id);
+                        // Download to cache
+                        const downloadedUri = await cacheManager.saveSong(song.id, sourceUri);
+                        if (downloadedUri) {
+                            console.log('Download complete:', downloadedUri);
+                            playUri = downloadedUri;
+                        } else {
+                            console.warn('Download failed, falling back to streaming');
+                            playUri = sourceUri;
+                        }
+                    }
+                } catch (downloadError) {
+                    console.error('Error in download mode, falling back to streaming:', downloadError);
+                    playUri = sourceUri;
+                }
+            }
+
+            // Load and play song
+            console.log('Loading song with URI:', playUri);
+
+            // expo-audio expects different format for local vs remote files
+            const source = playUri.startsWith('file://')
+                ? { uri: playUri }
+                : { uri: playUri };
+
+            await player.replace(source);
 
             // Check if this request is still valid
             if (currentRequestId !== loadRequestIdRef.current) {
@@ -122,14 +159,44 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 return;
             }
 
+            console.log('Starting playback...');
             player.play();
             setIsPlaying(true);
             loadingRef.current = false;
             setIsLoading(false);
+            console.log('Playback started successfully');
+
+            // Preload next song in download mode
+            if (streamingMode === 'download') {
+                preloadNextSong();
+            }
         } catch (error) {
             console.error('Error playing song:', error);
             loadingRef.current = false;
             setIsLoading(false);
+        }
+    };
+
+    const preloadNextSong = async () => {
+        if (preloadingRef.current) return;
+
+        try {
+            preloadingRef.current = true;
+            const nextIndex = currentIndex + 1;
+
+            if (nextIndex < queue.length) {
+                const nextSong = queue[nextIndex];
+                const cachedUri = await cacheManager.getSong(nextSong.id);
+
+                if (!cachedUri) {
+                    const sourceUri = getSongUri(nextSong);
+                    await cacheManager.saveSong(nextSong.id, sourceUri);
+                }
+            }
+        } catch (error) {
+            console.error('Error preloading next song:', error);
+        } finally {
+            preloadingRef.current = false;
         }
     };
 
