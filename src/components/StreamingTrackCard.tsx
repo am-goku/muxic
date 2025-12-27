@@ -7,9 +7,10 @@ import { StreamingTrack } from '../types/music';
 
 interface StreamingTrackCardProps {
     track: StreamingTrack;
+    queue?: StreamingTrack[];
 }
 
-export const StreamingTrackCard: React.FC<StreamingTrackCardProps> = ({ track }) => {
+export const StreamingTrackCard: React.FC<StreamingTrackCardProps> = ({ track, queue }) => {
     const { theme } = useTheme();
     const { playSong, pauseSong, resumeSong, currentSong, isPlaying } = usePlayer();
     const [imageLoaded, setImageLoaded] = React.useState(false);
@@ -49,7 +50,7 @@ export const StreamingTrackCard: React.FC<StreamingTrackCardProps> = ({ track })
                 resumeSong();
             }
         } else {
-            playSong(track);
+            playSong(track, queue);
         }
     };
 

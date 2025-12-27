@@ -210,10 +210,10 @@ export const HomeScreen: React.FC = () => {
                     <View style={styles.headerButtons}>
                         <TouchableOpacity
                             style={[styles.iconButton, { backgroundColor: theme.colors.surface }]}
-                            onPress={() => console.log('Search')}
+                            onPress={() => console.log('Equalizer')}
                             activeOpacity={0.7}
                         >
-                            <Ionicons name="search" size={20} color={theme.colors.text} />
+                            <Ionicons name="stats-chart" size={20} color={theme.colors.text} />
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.iconButton, { backgroundColor: theme.colors.surface }]}
@@ -263,7 +263,7 @@ export const HomeScreen: React.FC = () => {
                                 />
                                 <FlatList
                                     data={trendingTracks}
-                                    renderItem={({ item }) => <StreamingTrackCard track={item} />}
+                                    renderItem={({ item }) => <StreamingTrackCard track={item} queue={trendingTracks} />}
                                     keyExtractor={(item) => item.id}
                                     horizontal
                                     showsHorizontalScrollIndicator={false}
@@ -282,7 +282,7 @@ export const HomeScreen: React.FC = () => {
                                 />
                                 <FlatList
                                     data={topTracks}
-                                    renderItem={({ item }) => <StreamingTrackCard track={item} />}
+                                    renderItem={({ item }) => <StreamingTrackCard track={item} queue={topTracks} />}
                                     keyExtractor={(item) => item.id}
                                     horizontal
                                     showsHorizontalScrollIndicator={false}

@@ -11,7 +11,7 @@ interface NowPlayingBarProps {
 
 export const NowPlayingBar: React.FC<NowPlayingBarProps> = ({ onPress }) => {
     const { theme } = useTheme();
-    const { currentSong, isPlaying, isLoading, pauseSong, resumeSong, progress, duration } = usePlayer();
+    const { currentSong, isPlaying, isLoading, pauseSong, resumeSong, progress, duration, playNext, playPrevious, currentIndex, queue } = usePlayer();
 
     if (!currentSong) return null;
 
@@ -83,23 +83,63 @@ export const NowPlayingBar: React.FC<NowPlayingBarProps> = ({ onPress }) => {
                     </Text>
                 </View>
 
-                {/* Play/Pause/Loading button */}
-                <TouchableOpacity
-                    style={styles.playButton}
-                    onPress={isPlaying ? pauseSong : resumeSong}
-                    activeOpacity={0.7}
-                    disabled={isLoading}
-                >
-                    {isLoading ? (
-                        <ActivityIndicator size="small" color={theme.colors.primary} />
-                    ) : (
+                {/* Controls */}
+                <View style={styles.controls}>
+                    {/* Previous button */}
+                    <TouchableOpacity
+                        style={styles.controlButton}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            playPrevious();
+                        }}
+                        activeOpacity={0.7}
+                        disabled={currentIndex <= 0}
+                    >
                         <Ionicons
-                            name={isPlaying ? 'pause' : 'play'}
-                            size={28}
-                            color={theme.colors.text}
+                            name="play-skip-back"
+                            size={24}
+                            color={currentIndex <= 0 ? theme.colors.border : theme.colors.text}
                         />
-                    )}
-                </TouchableOpacity>
+                    </TouchableOpacity>
+
+                    {/* Play/Pause button */}
+                    <TouchableOpacity
+                        style={styles.playButton}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            isPlaying ? pauseSong() : resumeSong();
+                        }}
+                        activeOpacity={0.7}
+                        disabled={isLoading}
+                    >
+                        {isLoading ? (
+                            <ActivityIndicator size="small" color={theme.colors.primary} />
+                        ) : (
+                            <Ionicons
+                                name={isPlaying ? 'pause' : 'play'}
+                                size={28}
+                                color={theme.colors.text}
+                            />
+                        )}
+                    </TouchableOpacity>
+
+                    {/* Next button */}
+                    <TouchableOpacity
+                        style={styles.controlButton}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            playNext();
+                        }}
+                        activeOpacity={0.7}
+                        disabled={currentIndex >= queue.length - 1}
+                    >
+                        <Ionicons
+                            name="play-skip-forward"
+                            size={24}
+                            color={currentIndex >= queue.length - 1 ? theme.colors.border : theme.colors.text}
+                        />
+                    </TouchableOpacity>
+                </View>
             </View>
         </TouchableOpacity>
     );
@@ -140,6 +180,17 @@ const styles = StyleSheet.create({
     },
     artist: {
         fontSize: 12,
+    },
+    controls: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    controlButton: {
+        width: 36,
+        height: 36,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     playButton: {
         width: 44,

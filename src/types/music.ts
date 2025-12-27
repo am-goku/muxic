@@ -23,4 +23,6 @@ export interface StreamingTrack {
     streamUrl: string;
 }
 
+export type PlayableTrack = LocalSong | StreamingTrack;
+
 export type PermissionStatus = 'granted' | 'denied' | 'undetermined';

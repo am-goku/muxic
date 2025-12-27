@@ -1,8 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { Audio } from 'expo-av';
-import { LocalSong, StreamingTrack } from '../types/music';
-
-type PlayableTrack = LocalSong | StreamingTrack;
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import { useAudioPlayer } from 'expo-audio';
+import { PlayableTrack, StreamingTrack } from '../types/music';
 
 interface PlayerContextType {
     currentSong: PlayableTrack | null;
@@ -10,11 +8,15 @@ interface PlayerContextType {
     isLoading: boolean;
     progress: number;
     duration: number;
-    playSong: (song: PlayableTrack) => Promise<void>;
-    pauseSong: () => Promise<void>;
-    resumeSong: () => Promise<void>;
-    stopSong: () => Promise<void>;
-    seekTo: (position: number) => Promise<void>;
+    queue: PlayableTrack[];
+    currentIndex: number;
+    playSong: (song: PlayableTrack, newQueue?: PlayableTrack[]) => Promise<void>;
+    pauseSong: () => void;
+    resumeSong: () => void;
+    stopSong: () => void;
+    seekTo: (position: number) => void;
+    playNext: () => Promise<void>;
+    playPrevious: () => Promise<void>;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -25,24 +27,43 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [isLoading, setIsLoading] = useState(false);
     const [progress, setProgress] = useState(0);
     const [duration, setDuration] = useState(0);
-    const soundRef = useRef<Audio.Sound | null>(null);
+    const [queue, setQueue] = useState<PlayableTrack[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(-1);
+
+    const player = useAudioPlayer();
     const loadingRef = useRef(false);
+    const loadRequestIdRef = useRef(0);
 
+    // Update progress while playing and detect song end
     useEffect(() => {
-        // Configure audio mode
-        Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: true,
-            shouldDuckAndroid: true,
-        });
+        if (!isPlaying) return;
 
-        return () => {
-            // Cleanup on unmount
-            if (soundRef.current) {
-                soundRef.current.unloadAsync();
+        const interval = setInterval(() => {
+            if (player.playing) {
+                const currentTime = player.currentTime * 1000;
+                const songDuration = player.duration ? player.duration * 1000 : 0;
+
+                setProgress(currentTime);
+                if (songDuration) {
+                    setDuration(songDuration);
+                }
+
+                // Detect song end (within 500ms of completion)
+                if (songDuration > 0 && currentTime >= songDuration - 500) {
+                    setIsPlaying(false);
+                    setProgress(0);
+
+                    // Auto-play next song if available
+                    const nextIndex = currentIndex + 1;
+                    if (nextIndex < queue.length) {
+                        playSong(queue[nextIndex]);
+                    }
+                }
             }
-        };
-    }, []);
+        }, 500);
+
+        return () => clearInterval(interval);
+    }, [isPlaying, player, currentIndex, queue]);
 
     const isStreamingTrack = (song: PlayableTrack): song is StreamingTrack => {
         return 'streamUrl' in song;
@@ -55,110 +76,102 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         return song.uri;
     };
 
-    const playSong = async (song: PlayableTrack) => {
+    const playSong = async (song: PlayableTrack, newQueue?: PlayableTrack[]) => {
         try {
-            // Prevent multiple simultaneous loads
-            if (loadingRef.current) {
-                return;
-            }
+            // Increment request ID to invalidate previous requests
+            loadRequestIdRef.current += 1;
+            const currentRequestId = loadRequestIdRef.current;
 
             loadingRef.current = true;
             setIsLoading(true);
+
+            // Update queue if provided
+            if (newQueue) {
+                setQueue(newQueue);
+                const index = newQueue.findIndex(s => s.id === song.id);
+                setCurrentIndex(index);
+            } else {
+                // Find song in existing queue
+                const index = queue.findIndex(s => s.id === song.id);
+                if (index !== -1) {
+                    setCurrentIndex(index);
+                } else {
+                    // Song not in queue, add it to the end
+                    const updatedQueue = [...queue, song];
+                    setQueue(updatedQueue);
+                    setCurrentIndex(updatedQueue.length - 1);
+                }
+            }
 
             // Update current song immediately for UI feedback
             setCurrentSong(song);
             setProgress(0);
             setDuration(0);
 
-            // Stop current song if playing
-            if (soundRef.current) {
-                try {
-                    await soundRef.current.unloadAsync();
-                } catch (error) {
-                    console.error('Error unloading previous sound:', error);
-                }
-                soundRef.current = null;
-            }
-
             const uri = getSongUri(song);
 
             // Load and play new song
-            const { sound } = await Audio.Sound.createAsync(
-                { uri },
-                { shouldPlay: true },
-                onPlaybackStatusUpdate
-            );
+            await player.replace({
+                uri,
+            });
 
-            soundRef.current = sound;
+            // Check if this request is still valid
+            if (currentRequestId !== loadRequestIdRef.current) {
+                // This request was superseded, stop playback
+                player.pause();
+                return;
+            }
+
+            player.play();
             setIsPlaying(true);
+            loadingRef.current = false;
+            setIsLoading(false);
         } catch (error) {
             console.error('Error playing song:', error);
-            setIsPlaying(false);
-        } finally {
-            setIsLoading(false);
             loadingRef.current = false;
+            setIsLoading(false);
         }
     };
 
-    const pauseSong = async () => {
-        if (soundRef.current) {
-            try {
-                await soundRef.current.pauseAsync();
-                setIsPlaying(false);
-            } catch (error) {
-                console.error('Error pausing song:', error);
-            }
-        }
+    const pauseSong = () => {
+        player.pause();
+        setIsPlaying(false);
     };
 
-    const resumeSong = async () => {
-        if (soundRef.current) {
-            try {
-                await soundRef.current.playAsync();
-                setIsPlaying(true);
-            } catch (error) {
-                console.error('Error resuming song:', error);
-            }
-        }
+    const resumeSong = () => {
+        player.play();
+        setIsPlaying(true);
     };
 
-    const stopSong = async () => {
-        if (soundRef.current) {
-            try {
-                await soundRef.current.stopAsync();
-                await soundRef.current.unloadAsync();
-                soundRef.current = null;
-                setIsPlaying(false);
-                setCurrentSong(null);
-                setProgress(0);
-                setDuration(0);
-            } catch (error) {
-                console.error('Error stopping song:', error);
-            }
-        }
+    const stopSong = () => {
+        player.pause();
+        player.remove();
+        setIsPlaying(false);
+        setCurrentSong(null);
+        setProgress(0);
+        setDuration(0);
     };
 
     const seekTo = async (position: number) => {
-        if (soundRef.current) {
-            try {
-                await soundRef.current.setPositionAsync(position);
-            } catch (error) {
-                console.error('Error seeking:', error);
-            }
+        // expo-audio uses seconds, we use milliseconds
+        player.seekTo(position / 1000);
+    };
+
+    const playNext = async () => {
+        if (queue.length === 0 || currentIndex === -1) return;
+
+        const nextIndex = currentIndex + 1;
+        if (nextIndex < queue.length) {
+            await playSong(queue[nextIndex]);
         }
     };
 
-    const onPlaybackStatusUpdate = (status: any) => {
-        if (status.isLoaded) {
-            setProgress(status.positionMillis);
-            setDuration(status.durationMillis || 0);
-            setIsPlaying(status.isPlaying);
+    const playPrevious = async () => {
+        if (queue.length === 0 || currentIndex === -1) return;
 
-            // Handle song end
-            if (status.didJustFinish) {
-                setIsPlaying(false);
-                setProgress(0);
-            }
+        const prevIndex = currentIndex - 1;
+        if (prevIndex >= 0) {
+            await playSong(queue[prevIndex]);
         }
     };
 
@@ -170,11 +183,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 isLoading,
                 progress,
                 duration,
+                queue,
+                currentIndex,
                 playSong,
                 pauseSong,
                 resumeSong,
                 stopSong,
                 seekTo,
+                playNext,
+                playPrevious,
             }}
         >
             {children}
@@ -185,7 +202,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 export const usePlayer = () => {
     const context = useContext(PlayerContext);
     if (!context) {
-        throw new Error('usePlayer must be used within PlayerProvider');
+        throw new Error('usePlayer must be used within a PlayerProvider');
     }
     return context;
 };

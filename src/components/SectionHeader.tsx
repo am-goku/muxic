@@ -44,6 +44,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 16,
+        paddingRight: 24,
     },
     titleContainer: {
         flexDirection: 'row',
